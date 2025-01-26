@@ -120,6 +120,9 @@ score_sound_countdown = 100
 # Webcam Feed for Mediapipe
 cap = cv2.VideoCapture(0)
 
+# Gesture state to prevent repeated flaps
+flap_triggered = False
+
 while True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -141,10 +144,25 @@ while True:
         for hand_landmarks in results.multi_hand_landmarks:
             # Get y-coordinate of the wrist (landmark 0)
             wrist_y = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST].y
-            if wrist_y < 0.4:  # Adjust sensitivity threshold for "flap"
-                bird_movement = 0
-                bird_movement -= 8
-                flap_sound.play()
+            print(f"Wrist Y: {wrist_y}")  # Debugging
+
+            if wrist_y < 0.4 and not flap_triggered:  # Gesture detected (first entry into the zone)
+                flap_triggered = True  # Set the flag to prevent repeated flaps
+
+                if game_active:
+                    bird_movement = 0
+                    bird_movement -= 8
+                    flap_sound.play()
+                else:  # Restart the game
+                    game_active = True
+                    pipe_list.clear()
+                    bird_rect.center = (100, 512)
+                    bird_movement = 0
+                    score = 0
+
+            elif wrist_y >= 0.4:  # Reset the flag when wrist exits the zone
+                flap_triggered = False
+
             mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
     # Display the webcam feed for debugging (optional)
