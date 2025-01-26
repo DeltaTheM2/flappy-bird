@@ -30,7 +30,7 @@ def draw_pipes(pipes):
 
 def remove_pipes(pipes):
     for pipe in pipes:
-        if pipe.centerx == -600:
+        if pipe.centerx < -100:  # Adjust pipe removal threshold
             pipes.remove(pipe)
     return pipes
 
@@ -38,10 +38,8 @@ def check_collision(pipes):
     for pipe in pipes:
         if bird_rect.colliderect(pipe):
             return False
-
     if bird_rect.top <= -100 or bird_rect.bottom >= 900:
         return False
-
     return True
 
 def rotate_bird(bird):
@@ -79,7 +77,7 @@ clock = pygame.time.Clock()
 game_font = pygame.font.Font('04B_19.TTF', 40)
 
 # Game Variables
-gravity = 0.3
+gravity = 0.5
 bird_movement = 0
 game_active = True
 score = 0
@@ -106,7 +104,7 @@ pipe_surface = pygame.image.load('assets/pipe-green.png')
 pipe_surface = pygame.transform.scale2x(pipe_surface)
 pipe_list = []
 SPAWNPIPE = pygame.USEREVENT
-pygame.time.set_timer(SPAWNPIPE, 1200)
+pygame.time.set_timer(SPAWNPIPE, 2400)
 pipe_height = [400, 600, 800]
 
 game_over_surface = pygame.transform.scale2x(pygame.image.load('assets/message.png').convert_alpha())
@@ -120,8 +118,9 @@ score_sound_countdown = 100
 # Webcam Feed for Mediapipe
 cap = cv2.VideoCapture(0)
 
-# Gesture state to prevent repeated flaps
+# Gesture state
 flap_triggered = False
+frame_count = 0  # Frame counter for Mediapipe processing
 
 while True:
     for event in pygame.event.get():
@@ -131,45 +130,47 @@ while True:
             cv2.destroyAllWindows()
             sys.exit()
 
+        # Handle pipe spawning
+        if event.type == SPAWNPIPE:
+            print("Pipe Spawned!")  # Debug pipe spawning
+            pipe_list.extend(create_pipe())
+
     # Capture frame from webcam
     ret, frame = cap.read()
     if not ret:
         continue
     frame = cv2.flip(frame, 1)
-    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-    # Process frame with Mediapipe
-    results = hands.process(frame_rgb)
-    if results.multi_hand_landmarks:
-        for hand_landmarks in results.multi_hand_landmarks:
-            # Get y-coordinate of the wrist (landmark 0)
-            wrist_y = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST].y
-            print(f"Wrist Y: {wrist_y}")  # Debugging
+    # Resize frame for Mediapipe
+    frame_resized = cv2.resize(frame, (320, 240))
+    frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
 
-            if wrist_y < 0.4 and not flap_triggered:  # Gesture detected (first entry into the zone)
-                flap_triggered = True  # Set the flag to prevent repeated flaps
+    # Process Mediapipe every 3rd frame
+    frame_count += 1
+    if frame_count % 3 == 0:
+        results = hands.process(frame_rgb)
 
-                if game_active:
-                    bird_movement = 0
-                    bird_movement -= 8
-                    flap_sound.play()
-                else:  # Restart the game
-                    game_active = True
-                    pipe_list.clear()
-                    bird_rect.center = (100, 512)
-                    bird_movement = 0
-                    score = 0
+        if results.multi_hand_landmarks:
+            for hand_landmarks in results.multi_hand_landmarks:
+                wrist_y = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST].y
+                print(f"Wrist Y: {wrist_y}")  # Debugging
 
-            elif wrist_y >= 0.4:  # Reset the flag when wrist exits the zone
-                flap_triggered = False
+                if wrist_y < 0.5 and not flap_triggered:  # Flap detected
+                    flap_triggered = True
+                    if game_active:
+                        bird_movement = 0
+                        bird_movement -= 8
+                        flap_sound.play()
+                    else:  # Restart game
+                        game_active = True
+                        pipe_list.clear()
+                        bird_rect.center = (100, 512)
+                        bird_movement = 0
+                        score = 0
+                elif wrist_y >= 0.4:  # Reset gesture state
+                    flap_triggered = False
 
-            mp_drawing.draw_landmarks(frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-
-    # Display the webcam feed for debugging (optional)
-    cv2.imshow('Hand Tracking', frame)
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        break
-
+    # Game rendering
     screen.blit(bg_surface, (0, 0))
 
     if game_active:
@@ -203,4 +204,4 @@ while True:
         floor_x_pos = 0
 
     pygame.display.update()
-    clock.tick(60)
+    clock.tick(60)  # Limit frame rate
