@@ -1,4 +1,5 @@
 import pygame, sys, random, cv2, mediapipe as mp, os
+from picamera2 import Picamera2  # Import Picamera2 for Raspberry Pi Camera support
 
 # --- Setup Asset Paths ---
 BASE_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -47,7 +48,6 @@ def check_collision(pipes):
     return True
 
 def rotate_bird(bird):
-    # Rotate the bird based on its vertical speed.
     new_bird = pygame.transform.rotozoom(bird, -bird_movement * 3, 1)
     return new_bird
 
@@ -123,10 +123,12 @@ death_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_hit.wav')
 score_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_point.wav'))
 score_sound_countdown = 100
 
-# --- Setup Webcam Feed for Mediapipe ---
-cap = cv2.VideoCapture(0)
-# If needed on Raspberry Pi, you can try:
-# cap = cv2.VideoCapture(0, cv2.CAP_V4L2)
+# --- Setup Camera using Picamera2 ---
+picam2 = Picamera2()
+# Configure the camera to output BGR frames (for OpenCV compatibility) at 640x480.
+camera_config = picam2.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)})
+picam2.configure(camera_config)
+picam2.start()
 
 # --- Gesture State ---
 flap_triggered = False
@@ -137,7 +139,7 @@ while True:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             pygame.quit()
-            cap.release()
+            picam2.stop()
             cv2.destroyAllWindows()
             sys.exit()
 
@@ -146,11 +148,14 @@ while True:
             print("Pipe Spawned!")
             pipe_list.extend(create_pipe())
 
-    # --- Capture Frame from Webcam ---
-    ret, frame = cap.read()
-    if ret:
+    # --- Capture Frame from Picamera2 ---
+    frame = picam2.capture_array()
+    if frame is not None:
+        # Flip horizontally for a mirror view.
         frame = cv2.flip(frame, 1)
+        # Resize to a smaller resolution for faster processing.
         frame_resized = cv2.resize(frame, (320, 240))
+        # Convert from BGR (camera format) to RGB for Mediapipe.
         frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
 
         # Process Mediapipe every 3rd frame to reduce CPU load.
@@ -160,16 +165,16 @@ while True:
             if results.multi_hand_landmarks:
                 for hand_landmarks in results.multi_hand_landmarks:
                     wrist_y = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST].y
-                    print(f"Wrist Y: {wrist_y}")  # Debug: print wrist y-coordinate
+                    print(f"Wrist Y: {wrist_y}")  # Debug output
 
-                    # If the wrist is high (i.e. hand raised), trigger a flap.
+                    # Trigger a flap if the wrist is raised.
                     if wrist_y < 0.5 and not flap_triggered:
                         flap_triggered = True
                         if game_active:
                             bird_movement = 0
                             bird_movement -= 8
                             flap_sound.play()
-                        else:  # Restart game on gesture when game over
+                        else:  # Restart game if it's over.
                             game_active = True
                             pipe_list.clear()
                             bird_rect.center = (100, 512)
@@ -178,8 +183,7 @@ while True:
                     elif wrist_y >= 0.4:
                         flap_triggered = False
     else:
-        # If frame capture fails, log it and continue the game loop.
-        print("Failed to capture frame from webcam.")
+        print("Failed to capture frame from Picamera2.")
 
     # --- Game Rendering ---
     screen.blit(bg_surface, (0, 0))
@@ -216,4 +220,4 @@ while True:
         floor_x_pos = 0
 
     pygame.display.update()
-    clock.tick(60)  # Limit the frame rate to 60 FPS
+    clock.tick(60)  # Limit frame rate to 60 FPS
