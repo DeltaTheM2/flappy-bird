@@ -77,7 +77,7 @@ def update_score(score, high_score):
 
 # --- Initialize Pygame ---
 pygame.init()
-screen = pygame.display.set_mode((576, 1024))
+screen = pygame.display.set_mode((800, 600))
 clock = pygame.time.Clock()
 game_font = pygame.font.Font(os.path.join(BASE_PATH, '04B_19.TTF'), 40)
 
@@ -105,14 +105,14 @@ bird_upflap = pygame.transform.scale2x(
 bird_frames = [bird_downflap, bird_midflap, bird_upflap]
 bird_index = 0
 bird_surface = bird_frames[bird_index]
-bird_rect = bird_surface.get_rect(center=(100, 512))
+bird_rect = bird_surface.get_rect(center=(350, 300))
 
 pipe_surface = pygame.image.load(os.path.join(BASE_PATH, 'assets', 'pipe-green.png'))
 pipe_surface = pygame.transform.scale2x(pipe_surface)
 pipe_list = []
 SPAWNPIPE = pygame.USEREVENT
 pygame.time.set_timer(SPAWNPIPE, 2400)
-pipe_height = [400, 600, 800]
+pipe_height = [150, 250, 350]
 
 game_over_surface = pygame.transform.scale2x(
     pygame.image.load(os.path.join(BASE_PATH, 'assets', 'message.png')).convert_alpha())
