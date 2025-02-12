@@ -20,7 +20,7 @@ def draw_floor():
 
 def create_pipe():
     random_pipe_pos = random.choice(pipe_height)
-    pipe_gap = 150  # Adjusted gap for a 600px-high screen
+    pipe_gap = 175  # Adjusted gap for a 600px-high screen
     bottom_pipe = pipe_surface.get_rect(midtop=(SCREEN_WIDTH + 50, random_pipe_pos))
     top_pipe = pipe_surface.get_rect(midbottom=(SCREEN_WIDTH + 50, random_pipe_pos - pipe_gap))
     return bottom_pipe, top_pipe
@@ -120,7 +120,7 @@ pipe_surface = pygame.transform.scale2x(pipe_surface)
 pipe_list = []
 SPAWNPIPE = pygame.USEREVENT
 pygame.time.set_timer(SPAWNPIPE, 2400)
-pipe_height = [200, 250, 300]  # Adjusted pipe heights for a 600px-high screen
+pipe_height = [185, 235, 385]  # Adjusted pipe heights for a 600px-high screen
 
 game_over_surface = pygame.transform.scale2x(
     pygame.image.load(os.path.join(BASE_PATH, 'assets', 'message.png')).convert_alpha())
