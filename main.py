@@ -65,7 +65,7 @@ def bird_animation():
 def score_display(game_state):
     if game_state == 'main_game':
         score_surface = game_font.render(str(int(score)), True, (255, 255, 255))
-        score_rect = score_surface.get_rect(center=(SCREEN_WIDTH // 2, 50))
+        score_rect = score_surface.get_rect(center=(100, 50))
         screen.blit(score_surface, score_rect)
     elif game_state == 'game_over':
         score_surface = game_font.render(f'Score: {int(score)}', True, (255, 255, 255))
@@ -176,7 +176,7 @@ while True:
                     print(f"Wrist Y: {wrist_y}")  # Debug output
 
                     # Trigger a flap if the wrist is raised.
-                    if wrist_y < 0.5 and not flap_triggered:
+                    if wrist_y < 0.4 and not flap_triggered:
                         flap_triggered = True
                         if game_active:
                             bird_movement = 0
