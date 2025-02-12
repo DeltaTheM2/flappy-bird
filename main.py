@@ -20,7 +20,7 @@ def draw_floor():
 
 def create_pipe():
     random_pipe_pos = random.choice(pipe_height)
-    pipe_gap = 175  # Adjusted gap for a 600px-high screen
+    pipe_gap = 150  # Adjusted gap for a 600px-high screen
     bottom_pipe = pipe_surface.get_rect(midtop=(SCREEN_WIDTH + 50, random_pipe_pos))
     top_pipe = pipe_surface.get_rect(midbottom=(SCREEN_WIDTH + 50, random_pipe_pos - pipe_gap))
     return bottom_pipe, top_pipe
@@ -65,7 +65,7 @@ def bird_animation():
 def score_display(game_state):
     if game_state == 'main_game':
         score_surface = game_font.render(str(int(score)), True, (255, 255, 255))
-        score_rect = score_surface.get_rect(center=(100, 50))
+        score_rect = score_surface.get_rect(center=(SCREEN_WIDTH // 2, 50))
         screen.blit(score_surface, score_rect)
     elif game_state == 'game_over':
         score_surface = game_font.render(f'Score: {int(score)}', True, (255, 255, 255))
@@ -96,11 +96,9 @@ high_score = 0
 
 # --- Load Assets ---
 bg_surface = pygame.image.load(os.path.join(BASE_PATH, 'assets', 'background-day.png')).convert()
-# Scale background to fill the screen
 bg_surface = pygame.transform.scale(bg_surface, (SCREEN_WIDTH, SCREEN_HEIGHT))
 
 floor_surface = pygame.image.load(os.path.join(BASE_PATH, 'assets', 'base.png')).convert()
-# Scale floor image to match the screen width while keeping its height
 floor_surface = pygame.transform.scale(floor_surface, (SCREEN_WIDTH, floor_surface.get_height()))
 floor_x_pos = 0
 
@@ -120,7 +118,7 @@ pipe_surface = pygame.transform.scale2x(pipe_surface)
 pipe_list = []
 SPAWNPIPE = pygame.USEREVENT
 pygame.time.set_timer(SPAWNPIPE, 2400)
-pipe_height = [185, 235, 385]  # Adjusted pipe heights for a 600px-high screen
+pipe_height = [200, 250, 300]
 
 game_over_surface = pygame.transform.scale2x(
     pygame.image.load(os.path.join(BASE_PATH, 'assets', 'message.png')).convert_alpha())
@@ -170,26 +168,31 @@ while True:
         frame_count += 1
         if frame_count % 3 == 0:
             results = hands.process(frame_rgb)
-            if results.multi_hand_landmarks:
-                for hand_landmarks in results.multi_hand_landmarks:
-                    wrist_y = hand_landmarks.landmark[mp_hands.HandLandmark.WRIST].y
-                    print(f"Wrist Y: {wrist_y}")  # Debug output
-
-                    # Trigger a flap if the wrist is raised.
-                    if wrist_y < 0.4 and not flap_triggered:
-                        flap_triggered = True
-                        if game_active:
-                            bird_movement = 0
-                            bird_movement -= 8
-                            flap_sound.play()
-                        else:  # Restart game if it's over.
-                            game_active = True
-                            pipe_list.clear()
-                            bird_rect.center = (100, SCREEN_HEIGHT // 2)
-                            bird_movement = 0
-                            score = 0
-                    elif wrist_y >= 0.4:
-                        flap_triggered = False
+            # Only trigger flap if two hands are detected
+            if results.multi_hand_landmarks and len(results.multi_hand_landmarks) >= 2:
+                # Retrieve wrist positions for the first two hands
+                wrist_y1 = results.multi_hand_landmarks[0].landmark[mp_hands.HandLandmark.WRIST].y
+                wrist_y2 = results.multi_hand_landmarks[1].landmark[mp_hands.HandLandmark.WRIST].y
+                print(f"Wrist Y1: {wrist_y1}, Wrist Y2: {wrist_y2}")
+                # If both hands are raised (i.e. in the upper 40–50% of the frame)
+                if wrist_y1 < 0.5 and wrist_y2 < 0.5 and not flap_triggered:
+                    flap_triggered = True
+                    if game_active:
+                        bird_movement = 0
+                        bird_movement -= 8
+                        flap_sound.play()
+                    else:  # Restart game if it's over.
+                        game_active = True
+                        pipe_list.clear()
+                        bird_rect.center = (100, SCREEN_HEIGHT // 2)
+                        bird_movement = 0
+                        score = 0
+                # Reset flap trigger if either hand is lowered
+                elif wrist_y1 >= 0.4 or wrist_y2 >= 0.4:
+                    flap_triggered = False
+            else:
+                # If less than two hands are detected, do not allow a flap
+                flap_triggered = False
     else:
         print("Failed to capture frame from Picamera2.")
 
