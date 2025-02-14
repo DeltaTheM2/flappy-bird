@@ -1,4 +1,4 @@
-import pygame, sys, random, cv2, mediapipe as mp, os
+import pygame, sys, random, cv2, mediapipe as mp, os, time, threading, lgpio
 from picamera2 import Picamera2  # Import Picamera2 for Raspberry Pi Camera support
 
 # --- Setup Asset Paths ---
@@ -71,7 +71,6 @@ def score_display(game_state):
         score_surface = game_font.render(f'Score: {int(score)}', True, (255, 255, 255))
         score_rect = score_surface.get_rect(center=(SCREEN_WIDTH // 2, 50))
         screen.blit(score_surface, score_rect)
-
         high_score_surface = game_font.render(f'High score: {int(high_score)}', True, (255, 255, 255))
         high_score_rect = high_score_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT - 50))
         screen.blit(high_score_surface, high_score_rect)
@@ -80,6 +79,15 @@ def update_score(score, high_score):
     if score > high_score:
         high_score = score
     return high_score
+
+def take_picture_countdown():
+    """Countdown from 3 to 1 and then capture an image from Picamera2."""
+    for i in range(3, 0, -1):
+        print(f"Taking picture in {i}...")
+        time.sleep(1)
+    filename = f"photo_{time.strftime('%Y%m%d_%H%M%S')}.jpg"
+    picam2.capture_file(filename)
+    print(f"Picture saved as {filename}")
 
 # --- Initialize Pygame ---
 pygame.init()
@@ -136,6 +144,14 @@ camera_config = picam2.create_preview_configuration(main={"format": "BGR888", "s
 picam2.configure(camera_config)
 picam2.start()
 
+# --- Setup GPIO using lgpio ---
+# Define the button GPIO pin (using BCM numbering)
+BUTTON_PIN = 17
+# Open the GPIO chip (typically gpiochip0 on a Raspberry Pi)
+chip = lgpio.gpiochip_open(0)
+# We'll poll the button pin state directly from the chip.
+button_last_state = 1  # Assume default state is HIGH (button not pressed)
+
 # --- Gesture State ---
 flap_triggered = False
 frame_count = 0  # Counter to control how often Mediapipe processes a frame
@@ -148,13 +164,12 @@ while True:
             picam2.stop()
             cv2.destroyAllWindows()
             sys.exit()
-
         # Pipe spawning event
         if event.type == SPAWNPIPE:
             print("Pipe Spawned!")
             pipe_list.extend(create_pipe())
 
-    # --- Capture Frame from Picamera2 ---
+    # --- Capture Frame from Picamera2 for Mediapipe ---
     frame = picam2.capture_array()
     if frame is not None:
         # Flip horizontally for a mirror view.
@@ -174,7 +189,7 @@ while True:
                 wrist_y1 = results.multi_hand_landmarks[0].landmark[mp_hands.HandLandmark.WRIST].y
                 wrist_y2 = results.multi_hand_landmarks[1].landmark[mp_hands.HandLandmark.WRIST].y
                 print(f"Wrist Y1: {wrist_y1}, Wrist Y2: {wrist_y2}")
-                # If both hands are raised (i.e. in the upper 40–50% of the frame)
+                # If both wrists are raised (in the top ~50% of the frame) and a flap wasn’t just triggered
                 if wrist_y1 < 0.5 and wrist_y2 < 0.5 and not flap_triggered:
                     flap_triggered = True
                     if game_active:
@@ -191,10 +206,23 @@ while True:
                 elif wrist_y1 >= 0.4 or wrist_y2 >= 0.4:
                     flap_triggered = False
             else:
-                # If less than two hands are detected, do not allow a flap
                 flap_triggered = False
     else:
         print("Failed to capture frame from Picamera2.")
+
+    # --- Check GPIO Button State ---
+    try:
+        # Read the state of the button pin; expecting 1 (HIGH) when not pressed and 0 (LOW) when pressed.
+        button_state = lgpio.gpio_read(chip, BUTTON_PIN)
+    except Exception as e:
+        print("GPIO read error:", e)
+        button_state = 1
+
+    # Detect a falling edge: button going from not pressed (1) to pressed (0)
+    if button_last_state == 1 and button_state == 0:
+        print("Button pressed: Starting picture countdown.")
+        threading.Thread(target=take_picture_countdown, daemon=True).start()
+    button_last_state = button_state
 
     # --- Game Rendering ---
     screen.blit(bg_surface, (0, 0))
