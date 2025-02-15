@@ -168,6 +168,25 @@ while True:
         if event.type == SPAWNPIPE:
             print("Pipe Spawned!")
             pipe_list.extend(create_pipe())
+        # Check for space bar press to take a picture.
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                print("Space pressed: Starting picture countdown.")
+                threading.Thread(target=take_picture_countdown, daemon=True).start()
+
+    # --- Check GPIO Button State ---
+    try:
+        # Read the state of the button pin; expecting 1 (HIGH) when not pressed and 0 (LOW) when pressed.
+        button_state = lgpio.gpio_read(chip, BUTTON_PIN)
+    except Exception as e:
+        print("GPIO read error:", e)
+        button_state = 1
+
+    # Detect a falling edge: button going from not pressed (1) to pressed (0)
+    if button_last_state == 1 and button_state == 0:
+        print("Button pressed: Starting picture countdown.")
+        threading.Thread(target=take_picture_countdown, daemon=True).start()
+    button_last_state = button_state
 
     # --- Capture Frame from Picamera2 for Mediapipe ---
     frame = picam2.capture_array()
@@ -209,20 +228,6 @@ while True:
                 flap_triggered = False
     else:
         print("Failed to capture frame from Picamera2.")
-
-    # --- Check GPIO Button State ---
-    try:
-        # Read the state of the button pin; expecting 1 (HIGH) when not pressed and 0 (LOW) when pressed.
-        button_state = lgpio.gpio_read(chip, BUTTON_PIN)
-    except Exception as e:
-        print("GPIO read error:", e)
-        button_state = 1
-
-    # Detect a falling edge: button going from not pressed (1) to pressed (0)
-    if button_last_state == 1 and button_state == 0:
-        print("Button pressed: Starting picture countdown.")
-        threading.Thread(target=take_picture_countdown, daemon=True).start()
-    button_last_state = button_state
 
     # --- Game Rendering ---
     screen.blit(bg_surface, (0, 0))
