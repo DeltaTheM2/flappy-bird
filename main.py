@@ -1,5 +1,8 @@
 import pygame, sys, random, cv2, mediapipe as mp, os, time, threading, lgpio
-from picamera2 import Picamera2  # Import Picamera2 for Raspberry Pi Camera support
+from picamera2 import Picamera2
+
+# Disable audio to avoid PulseAudio/ALSA errors
+os.environ["SDL_AUDIODRIVER"] = "dummy"
 
 # --- Setup Asset Paths ---
 BASE_PATH = os.path.dirname(os.path.realpath(__file__))
@@ -20,7 +23,7 @@ def draw_floor():
 
 def create_pipe():
     random_pipe_pos = random.choice(pipe_height)
-    pipe_gap = 150  # Adjusted gap for a 600px-high screen
+    pipe_gap = 150
     bottom_pipe = pipe_surface.get_rect(midtop=(SCREEN_WIDTH + 50, random_pipe_pos))
     top_pipe = pipe_surface.get_rect(midbottom=(SCREEN_WIDTH + 50, random_pipe_pos - pipe_gap))
     return bottom_pipe, top_pipe
@@ -40,7 +43,7 @@ def draw_pipes(pipes):
 
 def remove_pipes(pipes):
     for pipe in pipes[:]:
-        if pipe.centerx < -100:  # Remove pipes that have moved off-screen
+        if pipe.centerx < -100:
             pipes.remove(pipe)
     return pipes
 
@@ -81,7 +84,6 @@ def update_score(score, high_score):
     return high_score
 
 def take_picture_countdown():
-    """Countdown from 3 to 1 and then capture an image from Picamera2."""
     for i in range(3, 0, -1):
         print(f"Taking picture in {i}...")
         time.sleep(1)
@@ -132,29 +134,20 @@ game_over_surface = pygame.transform.scale2x(
     pygame.image.load(os.path.join(BASE_PATH, 'assets', 'message.png')).convert_alpha())
 game_over_rect = game_over_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
 
-#flap_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_wing.wav'))
-#death_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_hit.wav'))
-#score_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_point.wav'))
-score_sound_countdown = 100
-
 # --- Setup Camera using Picamera2 ---
 picam2 = Picamera2()
-# Configure the camera to output BGR frames (for OpenCV compatibility) at 640x480.
 camera_config = picam2.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)})
 picam2.configure(camera_config)
 picam2.start()
 
-# --- Setup GPIO using lgpio ---
-# Define the button GPIO pin (using BCM numbering)
+# --- Setup GPIO ---
 BUTTON_PIN = 17
-# Open the GPIO chip (typically gpiochip0 on a Raspberry Pi)
 chip = lgpio.gpiochip_open(0)
-# We'll poll the button pin state directly from the chip.
-button_last_state = 1  # Assume default state is HIGH (button not pressed)
+button_last_state = 1
 
 # --- Gesture State ---
 flap_triggered = False
-frame_count = 0  # Counter to control how often Mediapipe processes a frame
+frame_count = 0
 
 # --- Main Game Loop ---
 while True:
@@ -164,11 +157,9 @@ while True:
             picam2.stop()
             cv2.destroyAllWindows()
             sys.exit()
-        # Pipe spawning event
         if event.type == SPAWNPIPE:
             print("Pipe Spawned!")
             pipe_list.extend(create_pipe())
-        # Check for space bar press to take a picture.
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
                 print("Space pressed: Starting picture countdown.")
@@ -176,92 +167,81 @@ while True:
 
     # --- Check GPIO Button State ---
     try:
-        # Read the state of the button pin; expecting 1 (HIGH) when not pressed and 0 (LOW) when pressed.
         button_state = lgpio.gpio_read(chip, BUTTON_PIN)
     except Exception as e:
         print("GPIO read error:", e)
         button_state = 1
-
-    # Detect a falling edge: button going from not pressed (1) to pressed (0)
     if button_last_state == 1 and button_state == 0:
         print("Button pressed: Starting picture countdown.")
         threading.Thread(target=take_picture_countdown, daemon=True).start()
     button_last_state = button_state
 
-    # --- Capture Frame from Picamera2 for Mediapipe ---
+    # --- Capture and Process Frame for Mediapipe ---
     frame = picam2.capture_array()
     if frame is not None:
-        # Flip horizontally for a mirror view.
         frame = cv2.flip(frame, 1)
-        # Resize to a smaller resolution for faster processing.
         frame_resized = cv2.resize(frame, (320, 240))
-        # Convert from BGR (camera format) to RGB for Mediapipe.
         frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
-
-        # Process Mediapipe every 3rd frame to reduce CPU load.
-        frame_count += 1
+        frame_count +=1
+        # Process every frame for now (remove skipping for debugging)
         if frame_count % 3 == 0:
             results = hands.process(frame_rgb)
-            # Only trigger flap if two hands are detected
-            if results.multi_hand_landmarks and len(results.multi_hand_landmarks) >= 2:
-                # Retrieve wrist positions for the first two hands
-                wrist_y1 = results.multi_hand_landmarks[0].landmark[mp_hands.HandLandmark.WRIST].y
-                wrist_y2 = results.multi_hand_landmarks[1].landmark[mp_hands.HandLandmark.WRIST].y
-                print(f"Wrist Y1: {wrist_y1}, Wrist Y2: {wrist_y2}")
-                # If both wrists are raised (in the top ~50% of the frame) and a flap wasn’t just triggered
-                if wrist_y1 < 0.6 and wrist_y2 < 0.6 and not flap_triggered:
-                    flap_triggered = True
-                    if game_active:
-                        bird_movement = 0
-                        bird_movement -= 8
-                        #flap_sound.play()
-                    else:  # Restart game if it's over.
-                        game_active = True
-                        pipe_list.clear()
-                        bird_rect.center = (100, SCREEN_HEIGHT // 2)
-                        bird_movement = 0
-                        score = 0
-                # Reset flap trigger if either hand is lowered
-                elif wrist_y1 >= 0.5 or wrist_y2 >= 0.5:
+            if results.multi_hand_landmarks:
+                print(f"Detected {len(results.multi_hand_landmarks)} hands")
+                if len(results.multi_hand_landmarks) >= 2:
+                    wrist_y1 = results.multi_hand_landmarks[0].landmark[mp_hands.HandLandmark.WRIST].y
+                    wrist_y2 = results.multi_hand_landmarks[1].landmark[mp_hands.HandLandmark.WRIST].y
+                    print(f"Wrist Y1: {wrist_y1:.3f}, Wrist Y2: {wrist_y2:.3f}")
+                    # Relaxed threshold: flap if wrists are in top 60% of frame
+                    if wrist_y1 < 0.6 and wrist_y2 < 0.6 and not flap_triggered:
+                        flap_triggered = True
+                        print("Flap triggered!")
+                        if game_active:
+                            bird_movement = 0
+                            bird_movement -= 8
+                        else:
+                            game_active = True
+                            pipe_list.clear()
+                            bird_rect.center = (100, SCREEN_HEIGHT // 2)
+                            bird_movement = 0
+                            score = 0
+                    elif wrist_y1 >= 0.5 or wrist_y2 >= 0.5:
+                        flap_triggered = False
+                        print("Flap reset")
+                else:
                     flap_triggered = False
+                    print("Not enough hands detected")
             else:
                 flap_triggered = False
+                print("No hands detected")
     else:
-        print("Failed to capture frame from Picamera2.")
+        print("Failed to capture frame from Picamera2")
 
     # --- Game Rendering ---
     screen.blit(bg_surface, (0, 0))
 
     if game_active:
-        # Bird motion and rotation
         bird_movement += gravity
         rotated_bird = rotate_bird(bird_surface)
         bird_rect.centery += bird_movement
         screen.blit(rotated_bird, bird_rect)
         game_active = check_collision(pipe_list)
 
-        # Pipe movement and drawing
         pipe_list = move_pipes(pipe_list)
         pipe_list = remove_pipes(pipe_list)
         draw_pipes(pipe_list)
 
-        # Update score
         score += 0.01
         score_display('main_game')
-        score_sound_countdown -= 1
-        if score_sound_countdown <= 0:
-            #score_sound.play()
-            score_sound_countdown = 100
     else:
         screen.blit(game_over_surface, game_over_rect)
         high_score = update_score(score, high_score)
         score_display('game_over')
 
-    # Floor movement
     floor_x_pos -= 1
     draw_floor()
     if floor_x_pos <= -floor_surface.get_width():
         floor_x_pos = 0
 
     pygame.display.update()
-    clock.tick(60)  # Limit frame rate to 60 FPS
+    clock.tick(60)
