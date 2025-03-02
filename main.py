@@ -209,7 +209,7 @@ while True:
                 wrist_y2 = results.multi_hand_landmarks[1].landmark[mp_hands.HandLandmark.WRIST].y
                 print(f"Wrist Y1: {wrist_y1}, Wrist Y2: {wrist_y2}")
                 # If both wrists are raised (in the top ~50% of the frame) and a flap wasn’t just triggered
-                if wrist_y1 < 0.5 and wrist_y2 < 0.5 and not flap_triggered:
+                if wrist_y1 < 0.4 and wrist_y2 < 0.4 and not flap_triggered:
                     flap_triggered = True
                     if game_active:
                         bird_movement = 0
