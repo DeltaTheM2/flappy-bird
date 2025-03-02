@@ -135,7 +135,7 @@ game_over_rect = game_over_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HE
 #flap_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_wing.wav'))
 #death_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_hit.wav'))
 #score_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_point.wav'))
-#score_sound_countdown = 100
+score_sound_countdown = 100
 
 # --- Setup Camera using Picamera2 ---
 picam2 = Picamera2()
