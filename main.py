@@ -136,7 +136,7 @@ game_over_rect = game_over_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HE
 
 # --- Setup Camera using Picamera2 ---
 picam2 = Picamera2()
-camera_config = picam2.create_preview_configuration(main={"format": "BGR888", "size": (640, 480)})
+camera_config = picam2.create_preview_configuration(main={"format": "BGR888", "size": (320, 240)})  # Reduced resolution
 picam2.configure(camera_config)
 picam2.start()
 
@@ -158,11 +158,9 @@ while True:
             cv2.destroyAllWindows()
             sys.exit()
         if event.type == SPAWNPIPE:
-            print("Pipe Spawned!")
             pipe_list.extend(create_pipe())
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
-                print("Space pressed: Starting picture countdown.")
                 threading.Thread(target=take_picture_countdown, daemon=True).start()
 
     # --- Check GPIO Button State ---
@@ -172,7 +170,6 @@ while True:
         print("GPIO read error:", e)
         button_state = 1
     if button_last_state == 1 and button_state == 0:
-        print("Button pressed: Starting picture countdown.")
         threading.Thread(target=take_picture_countdown, daemon=True).start()
     button_last_state = button_state
 
@@ -180,39 +177,33 @@ while True:
     frame = picam2.capture_array()
     if frame is not None:
         frame = cv2.flip(frame, 1)
-        frame_resized = cv2.resize(frame, (320, 240))
-        frame_rgb = cv2.cvtColor(frame_resized, cv2.COLOR_BGR2RGB)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-        # Process every frame for now (remove skipping for debugging)
-        results = hands.process(frame_rgb)
-        if results.multi_hand_landmarks:
-            print(f"Detected {len(results.multi_hand_landmarks)} hands")
-            if len(results.multi_hand_landmarks) >= 2:
-                wrist_y1 = results.multi_hand_landmarks[0].landmark[mp_hands.HandLandmark.WRIST].y
-                wrist_y2 = results.multi_hand_landmarks[1].landmark[mp_hands.HandLandmark.WRIST].y
-                print(f"Wrist Y1: {wrist_y1:.3f}, Wrist Y2: {wrist_y2:.3f}")
-                # Relaxed threshold: flap if wrists are in top 60% of frame
-                if wrist_y1 < 0.6 and wrist_y2 < 0.6 and not flap_triggered:
-                    flap_triggered = True
-                    print("Flap triggered!")
-                    if game_active:
-                        bird_movement = 0
-                        bird_movement -= 8
-                    else:
-                        game_active = True
-                        pipe_list.clear()
-                        bird_rect.center = (100, SCREEN_HEIGHT // 2)
-                        bird_movement = 0
-                        score = 0
-                elif wrist_y1 >= 0.5 or wrist_y2 >= 0.5:
+        # Process every 5th frame to reduce load (adjustable)
+        frame_count += 1
+        if frame_count % 5 == 0:
+            results = hands.process(frame_rgb)
+            if results.multi_hand_landmarks:
+                if len(results.multi_hand_landmarks) >= 2:
+                    wrist_y1 = results.multi_hand_landmarks[0].landmark[mp_hands.HandLandmark.WRIST].y
+                    wrist_y2 = results.multi_hand_landmarks[1].landmark[mp_hands.HandLandmark.WRIST].y
+                    if wrist_y1 < 0.6 and wrist_y2 < 0.6 and not flap_triggered:
+                        flap_triggered = True
+                        if game_active:
+                            bird_movement = 0
+                            bird_movement -= 8
+                        else:
+                            game_active = True
+                            pipe_list.clear()
+                            bird_rect.center = (100, SCREEN_HEIGHT // 2)
+                            bird_movement = 0
+                            score = 0
+                    elif wrist_y1 >= 0.5 or wrist_y2 >= 0.5:
+                        flap_triggered = False
+                else:
                     flap_triggered = False
-                    print("Flap reset")
             else:
                 flap_triggered = False
-                print("Not enough hands detected")
-        else:
-            flap_triggered = False
-            print("No hands detected")
     else:
         print("Failed to capture frame from Picamera2")
 
@@ -243,4 +234,4 @@ while True:
         floor_x_pos = 0
 
     pygame.display.update()
-    clock.tick(60)
+    clock.tick(60)  # Aim for 60 FPS
