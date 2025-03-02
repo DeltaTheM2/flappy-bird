@@ -1,5 +1,5 @@
-import pygame, sys, random, cv2, mediapipe as mp, os, time, threading, lgpio
-from picamera2 import Picamera2
+import pygame, sys, random, cv2, mediapipe as mp, os, time, threading
+import RPi.GPIO as GPIO  # Replace lgpio with RPi.GPIO
 
 # Disable audio to avoid PulseAudio/ALSA errors
 os.environ["SDL_AUDIODRIVER"] = "dummy"
@@ -140,10 +140,10 @@ camera_config = picam2.create_preview_configuration(main={"format": "BGR888", "s
 picam2.configure(camera_config)
 picam2.start()
 
-# --- Setup GPIO ---
+# --- Setup GPIO with RPi.GPIO ---
 BUTTON_PIN = 17
-chip = lgpio.gpiochip_open(0)
-lgpio.gpio_set_pull(chip, BUTTON_PIN, lgpio.PULL_UP)  # Set internal pull-up
+GPIO.setmode(GPIO.BCM)  # Use BCM numbering
+GPIO.setup(BUTTON_PIN, GPIO.IN, pull_up_down=GPIO.PUD_UP)  # Set as input with internal pull-up
 button_last_state = 1  # Default HIGH due to pull-up
 
 # --- Gesture State ---
@@ -159,6 +159,7 @@ while True:
             pygame.quit()
             picam2.stop()
             cv2.destroyAllWindows()
+            GPIO.cleanup()  # Clean up GPIO on exit
             sys.exit()
         if event.type == SPAWNPIPE:
             print("Pipe Spawned!")
@@ -170,7 +171,7 @@ while True:
 
     # --- Check GPIO Button State ---
     try:
-        button_state = lgpio.gpio_read(chip, BUTTON_PIN)
+        button_state = GPIO.input(BUTTON_PIN)  # Read GPIO 17 state
         print(f"Button state: {button_state}")  # Debug print
     except Exception as e:
         print("GPIO read error:", e)
