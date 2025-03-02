@@ -132,10 +132,10 @@ game_over_surface = pygame.transform.scale2x(
     pygame.image.load(os.path.join(BASE_PATH, 'assets', 'message.png')).convert_alpha())
 game_over_rect = game_over_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
 
-flap_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_wing.wav'))
-death_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_hit.wav'))
-score_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_point.wav'))
-score_sound_countdown = 100
+#flap_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_wing.wav'))
+#death_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_hit.wav'))
+#score_sound = pygame.mixer.Sound(os.path.join(BASE_PATH, 'sound', 'sfx_point.wav'))
+#score_sound_countdown = 100
 
 # --- Setup Camera using Picamera2 ---
 picam2 = Picamera2()
@@ -214,7 +214,7 @@ while True:
                     if game_active:
                         bird_movement = 0
                         bird_movement -= 8
-                        flap_sound.play()
+                        #flap_sound.play()
                     else:  # Restart game if it's over.
                         game_active = True
                         pipe_list.clear()
@@ -250,7 +250,7 @@ while True:
         score_display('main_game')
         score_sound_countdown -= 1
         if score_sound_countdown <= 0:
-            score_sound.play()
+            #score_sound.play()
             score_sound_countdown = 100
     else:
         screen.blit(game_over_surface, game_over_rect)
